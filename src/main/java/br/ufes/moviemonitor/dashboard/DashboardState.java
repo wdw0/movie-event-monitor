@@ -36,8 +36,9 @@ public final class DashboardState {
                 Config.decimal("TREND_POPULARITY_INCREASE", 5.0),
                 Config.integer("TREND_VOTE_INCREASE", 100),
                 Config.decimal("TREND_RATING_INCREASE", 0.5));
+        List<String> genres = event.genres() == null ? List.of() : List.copyOf(event.genres());
         movies.put(event.movieId(), new MovieRow(event.movieId(), event.title(), event.rating(), event.voteCount(),
-                event.popularity(), event.timestamp(), isNew, event.rating() >= ratingThreshold,
+                event.popularity(), genres, event.timestamp(), isNew, event.rating() >= ratingThreshold,
                 event.popularity() >= popularityThreshold, trending));
         appendEvent(event.eventType(), event.movieId(), event.title(), event.timestamp());
         if (isNew) recordSignal("NEW_MOVIE", event);
@@ -76,11 +77,11 @@ public final class DashboardState {
                 sortedMovies, List.copyOf(events), Map.copyOf(eventCounts), List.copyOf(popularity));
     }
 
-    public record MovieRow(int movieId, String title, double rating, int votes, double popularity,
+    public record MovieRow(int movieId, String title, double rating, int votes, double popularity, List<String> genres,
                            Instant lastUpdate, boolean newMovie, boolean highRating,
                            boolean highPopularity, boolean trending) {
         MovieRow withTrending(boolean value) {
-            return new MovieRow(movieId, title, rating, votes, popularity, lastUpdate, newMovie,
+            return new MovieRow(movieId, title, rating, votes, popularity, genres, lastUpdate, newMovie,
                     highRating, highPopularity, value);
         }
     }

@@ -36,6 +36,7 @@ public final class DashboardServer {
         ObjectMapper mapper = Json.mapper();
         server.createContext("/api/health", exchange -> respond(exchange, mapper, Map.of("status", kafkaOnline(), "consumerGroup", "movie-dashboard")));
         server.createContext("/api/snapshot", exchange -> respond(exchange, mapper, Map.of("data", state.snapshot(), "kafka", kafkaSnapshot())));
+        server.createContext("/recommendations.js", DashboardServer::serveRecommendations);
         server.createContext("/", DashboardServer::serveIndex);
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
@@ -140,6 +141,21 @@ public final class DashboardServer {
             if (input == null) { exchange.sendResponseHeaders(404, -1); return; }
             byte[] bytes = input.readAllBytes();
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (var out = exchange.getResponseBody()) { out.write(bytes); }
+        }
+    }
+
+    private static void serveRecommendations(HttpExchange exchange) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            exchange.sendResponseHeaders(405, -1);
+            return;
+        }
+        try (var input = DashboardServer.class.getResourceAsStream("/dashboard/recommendations.js")) {
+            if (input == null) { exchange.sendResponseHeaders(404, -1); return; }
+            byte[] bytes = input.readAllBytes();
+            exchange.getResponseHeaders().set("Content-Type", "text/javascript; charset=utf-8");
+            exchange.getResponseHeaders().set("Cache-Control", "no-store");
             exchange.sendResponseHeaders(200, bytes.length);
             try (var out = exchange.getResponseBody()) { out.write(bytes); }
         }
