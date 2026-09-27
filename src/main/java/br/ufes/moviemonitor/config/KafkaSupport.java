@@ -16,7 +16,7 @@ public final class KafkaSupport {
     public static KafkaConsumer<String, String> consumer(String group) {
         Properties p = new Properties(); p.put("bootstrap.servers", Config.BOOTSTRAP); p.put("group.id", group);
         p.put("key.deserializer", StringDeserializer.class.getName()); p.put("value.deserializer", StringDeserializer.class.getName());
-        p.put("auto.offset.reset", "earliest"); p.put("enable.auto.commit", "true");
+        p.put("auto.offset.reset", "earliest"); p.put("enable.auto.commit", "false");
         return new KafkaConsumer<>(p);
     }
 }

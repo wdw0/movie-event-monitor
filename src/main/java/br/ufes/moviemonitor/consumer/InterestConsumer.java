@@ -15,17 +15,21 @@ public final class InterestConsumer {
         Map<Integer, MovieState> seen = new HashMap<>(); var mapper = Json.mapper();
         try (var consumer = KafkaSupport.consumer(group)) {
             consumer.subscribe(List.of(Config.MOVIE_TOPIC)); System.out.println("Group " + group + " subscribed to " + Config.MOVIE_TOPIC);
-            while (true) for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(500))) {
-                MovieEvent e = mapper.readValue(record.value(), MovieEvent.class);
-                boolean match = switch (mode) {
-                    case RATING -> InterestRules.highRating(e, ratingThreshold);
-                    case POPULARITY -> InterestRules.highPopularity(e, popularityThreshold);
-                    case RELEASE -> InterestRules.newMovie(e, seen);
-                };
-                if (match) {
-                    String situation = switch (mode) { case RATING -> "HIGH_RATING"; case POPULARITY -> "HIGH_POPULARITY"; case RELEASE -> "NEW_MOVIE"; };
-                    System.out.printf("[%s] %s | rating %.1f | popularity %.1f | votes %d | release %s (partition=%d offset=%d)%n", situation, e.title(), e.rating(), e.popularity(), e.voteCount(), e.releaseDate(), record.partition(), record.offset());
+            while (true) {
+                var records = consumer.poll(Duration.ofMillis(500));
+                for (ConsumerRecord<String, String> record : records) {
+                    MovieEvent e = mapper.readValue(record.value(), MovieEvent.class);
+                    boolean match = switch (mode) {
+                        case RATING -> InterestRules.highRating(e, ratingThreshold);
+                        case POPULARITY -> InterestRules.highPopularity(e, popularityThreshold);
+                        case RELEASE -> InterestRules.newMovie(e, seen);
+                    };
+                    if (match) {
+                        String situation = switch (mode) { case RATING -> "HIGH_RATING"; case POPULARITY -> "HIGH_POPULARITY"; case RELEASE -> "NEW_MOVIE"; };
+                        System.out.printf("[%s] %s | rating %.1f | popularity %.1f | votes %d | release %s (partition=%d offset=%d)%n", situation, e.title(), e.rating(), e.popularity(), e.voteCount(), e.releaseDate(), record.partition(), record.offset());
+                    }
                 }
+                if (!records.isEmpty()) consumer.commitSync();
             }
         }
     }

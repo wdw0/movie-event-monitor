@@ -1,4 +1,8 @@
-.env
+.env*
+!.env.example
 data/
 target/
 *.log
+*:Zone.Identifier
+Projeto1.pdf
+README.md
