@@ -1,0 +1,9 @@
+.git
+data
+target
+.env
+src/test/js
+scripts
+README.md
+docker-compose.yml
+Dockerfile
