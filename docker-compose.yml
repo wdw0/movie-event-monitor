@@ -1,12 +1,33 @@
+x-kafka-broker: &kafka-broker
+  image: apache/kafka:4.3.1
+  healthcheck:
+    test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list >/dev/null 2>&1"]
+    interval: 5s
+    timeout: 10s
+    retries: 30
+    start_period: 15s
+
+# Componentes Java: mesma imagem, muda apenas a classe principal (`command`).
+# Dentro da rede do compose os brokers são acessados pelo listener INTERNAL.
+x-app: &app
+  image: movie-monitor
+  env_file: .env
+  environment:
+    KAFKA_BOOTSTRAP_SERVERS: "broker1:19092,broker2:19092,broker3:19092"
+  depends_on:
+    topics-init:
+      condition: service_completed_successfully
+  restart: unless-stopped
+
 services:
 
   broker1:
-    image: apache/kafka:4.3.1
+    <<: *kafka-broker
     hostname: broker1
     container_name: kafka-broker1
 
     volumes:
-      - ./data/broker1:/tmp/kraft-combined-logs
+      - broker1-data:/var/lib/kafka/data
 
     ports:
       - "9092:9092"
@@ -37,16 +58,16 @@ services:
 
       KAFKA_NUM_PARTITIONS: 3
 
-      KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
 
 
   broker2:
-    image: apache/kafka:4.3.1
+    <<: *kafka-broker
     hostname: broker2
     container_name: kafka-broker2
 
     volumes:
-      - ./data/broker2:/tmp/kraft-combined-logs
+      - broker2-data:/var/lib/kafka/data
 
     ports:
       - "9094:9092"
@@ -77,16 +98,16 @@ services:
 
       KAFKA_NUM_PARTITIONS: 3
 
-      KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
 
 
   broker3:
-    image: apache/kafka:4.3.1
+    <<: *kafka-broker
     hostname: broker3
     container_name: kafka-broker3
 
     volumes:
-      - ./data/broker3:/tmp/kraft-combined-logs
+      - broker3-data:/var/lib/kafka/data
 
     ports:
       - "9096:9092"
@@ -117,4 +138,76 @@ services:
 
       KAFKA_NUM_PARTITIONS: 3
 
-      KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+
+
+  # Cria os tópicos e termina (one-shot).
+  topics-init:
+    image: apache/kafka:4.3.1
+    depends_on:
+      broker1:
+        condition: service_healthy
+      broker2:
+        condition: service_healthy
+      broker3:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        BS=broker1:19092,broker2:19092,broker3:19092
+        for t in movie-events movie-derived-events; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server $$BS --create --if-not-exists --topic $$t --partitions 3 --replication-factor 3
+        done
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server $$BS --list
+
+
+  dashboard:
+    <<: *app
+    build: .
+    container_name: movie-dashboard
+    command: ["br.ufes.moviemonitor.dashboard.DashboardServer"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "broker1:19092,broker2:19092,broker3:19092"
+      DASHBOARD_PORT: "8080"
+    ports:
+      - "8080:8080"
+
+  rating:
+    <<: *app
+    container_name: movie-rating
+    command: ["br.ufes.moviemonitor.consumer.RatingConsumer"]
+
+  popularity:
+    <<: *app
+    container_name: movie-popularity
+    command: ["br.ufes.moviemonitor.consumer.PopularityConsumer"]
+
+  release:
+    <<: *app
+    container_name: movie-release
+    command: ["br.ufes.moviemonitor.consumer.ReleaseConsumer"]
+
+  analyzer:
+    <<: *app
+    container_name: movie-analyzer
+    command: ["br.ufes.moviemonitor.consumer.EventAnalyzer"]
+
+  action:
+    <<: *app
+    container_name: movie-action
+    command: ["br.ufes.moviemonitor.consumer.ActionConsumer"]
+
+  # Sem TMDB_API_KEY o producer aborta; para após 5 tentativas.
+  producer:
+    <<: *app
+    container_name: movie-producer
+    command: ["br.ufes.moviemonitor.producer.MovieProducer"]
+    restart: on-failure:5
+
+
+volumes:
+  broker1-data:
+  broker2-data:
+  broker3-data:
